@@ -14,8 +14,10 @@ const CONFIG = JSON.parse(readFileSync(resolve(__dirname, '../search-config.json
   job_titles: string[];
 };
 const JOB_TITLES: string[] = CONFIG.job_titles;
-const LOCATION = CONFIG.location ?? 'Germany';
-const SINCE_PERIOD = CONFIG.sincePeriod ?? 'LAST_24_HOURS';
+// Env overrides (e.g. from a Make.com repository_dispatch payload) win over the
+// JSON config; empty/unset falls back to search-config.json.
+const LOCATION = process.env.SEARCH_LOCATION || CONFIG.location || 'Germany';
+const SINCE_PERIOD = process.env.SEARCH_SINCE_PERIOD || CONFIG.sincePeriod || 'LAST_24_HOURS';
 
 /** Unique job id = trailing number in the URL (slug differs, id is stable). */
 function jobId(url: string): string {

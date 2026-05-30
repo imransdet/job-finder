@@ -4,8 +4,15 @@ name: Xing job collector
 on:
   # Manual run from the Actions tab.
   workflow_dispatch:
+  # External trigger (e.g. Make.com) via the GitHub "repository dispatch" API.
+  # Send a POST to /repos/<owner>/<repo>/dispatches with:
+  #   { "event_type": "run-xing-collector",
+  #     "client_payload": { "location": "...", "since_period": "..." } }
+  # client_payload is optional; omit it to use search-config.json values.
+  repository_dispatch:
+    types: [run-xing-collector]
   # Daily schedule (06:00 UTC). Matches the "Past 24 hours" filter.
-  # Edit the cron or remove this block if you only want manual runs.
+  # Edit the cron or remove this block if you only want manual/external runs.
   schedule:
     - cron: '0 6 * * *'
 
@@ -45,6 +52,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Xing collection (headless)
+        # Optional overrides from a Make.com repository_dispatch payload.
+        # Empty for schedule/manual runs -> the spec falls back to search-config.json.
+        env:
+          SEARCH_LOCATION: ${{ github.event.client_payload.location }}
+          SEARCH_SINCE_PERIOD: ${{ github.event.client_payload.since_period }}
         run: npx playwright test xing-all-titles-to-sheet
 
       - name: Upload Playwright report

@@ -148,6 +148,61 @@ Notes:
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
 - **Scheduled:** daily at `06:00 UTC` (`cron: '0 6 * * *'`). Edit the `schedule:`
   block in the workflow to change it; remove it for manual-only runs.
+- **External (Make.com / any HTTP client):** via the GitHub *repository dispatch*
+  API — see below.
+
+### Trigger from Make.com
+
+The workflow listens for a `repository_dispatch` event of type
+`run-xing-collector`. Make.com fires it with a single HTTP request.
+
+**1. Create a GitHub token** (used by Make to authenticate):
+- *Fine-grained PAT* — repo `imransdet/job-finder`, Repository permissions →
+  **Contents: Read and write** (required by the dispatch API), or
+- *Classic PAT* — `repo` scope.
+
+Store it in Make as a connection/keychain value (don't hard-code it).
+
+**2. Add an HTTP → “Make a request” module** in your Make scenario:
+
+| Field | Value |
+|-------|-------|
+| URL | `https://api.github.com/repos/imransdet/job-finder/dispatches` |
+| Method | `POST` |
+| Header | `Accept: application/vnd.github+json` |
+| Header | `Authorization: Bearer YOUR_GITHUB_TOKEN` |
+| Header | `X-GitHub-Api-Version: 2022-11-28` |
+| Header | `User-Agent: make.com` |
+| Body type | Raw / `application/json` |
+
+**Body (JSON):**
+
+```json
+{
+  "event_type": "run-xing-collector",
+  "client_payload": {
+    "location": "Germany",
+    "since_period": "LAST_24_HOURS"
+  }
+}
+```
+
+- `client_payload` is **optional**. Omit it to use the values in
+  `search-config.json`. When present, `location` / `since_period` override the
+  config for that run (the job titles always come from `search-config.json`).
+- `since_period`: `LAST_24_HOURS`, `LAST_7_DAYS`, `LAST_30_DAYS`, or `""` (any time).
+- **Success = HTTP `204 No Content`** (the API returns no body). The Action then
+  starts; watch it in the repo's **Actions** tab.
+
+> Tip: a quick `curl` sanity check before wiring Make:
+> ```bash
+> curl -X POST \
+>   -H "Accept: application/vnd.github+json" \
+>   -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
+>   -H "X-GitHub-Api-Version: 2022-11-28" \
+>   https://api.github.com/repos/imransdet/job-finder/dispatches \
+>   -d '{"event_type":"run-xing-collector"}'
+> ```
 
 See **[GITHUB_ACTIONS.md](GITHUB_ACTIONS.md)** for the complete walkthrough
 (pushing the repo, customizing the search, local-vs-CI behavior, gotchas).
