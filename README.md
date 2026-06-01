@@ -145,12 +145,12 @@ Notes:
 
 ### Triggers
 
-- **External (Make.com / any HTTP client):** via the GitHub *repository dispatch*
-  API — this is the primary trigger; **Make.com owns the daily schedule**. See below.
+- **Scheduled (GitHub cron):** daily at **01:00 UTC** (`cron: '0 1 * * *'`).
+  GitHub cron is always UTC — change the hour in the workflow for a different
+  local time.
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
-
-> GitHub's own `schedule:` cron is intentionally **not** used (so you don't get
-> GitHub's scheduled-run emails). Make.com handles the daily timing instead.
+- **External (Make.com / any HTTP client):** via the GitHub *repository dispatch*
+  API (optional; usable alongside the cron). See below.
 
 ### Trigger from Make.com (with daily 2 PM schedule)
 

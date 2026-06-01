@@ -12,9 +12,10 @@ on:
   # client_payload is optional; omit it to use search-config.json values.
   repository_dispatch:
     types: [run-xing-collector]
-  # NOTE: GitHub's own `schedule:` cron is intentionally omitted — scheduling is
-  # handled in Make.com. Add a `schedule:` block back here if you ever want
-  # GitHub to run it directly.
+  # Daily self-run at 01:00 UTC. NOTE: GitHub cron is always UTC — adjust the
+  # hour if you want 1 AM in your local timezone.
+  schedule:
+    - cron: '0 1 * * *'
 
 # Avoid overlapping runs (each run takes a while and writes the same sheet).
 concurrency:

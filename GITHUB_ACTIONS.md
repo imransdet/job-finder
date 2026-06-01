@@ -65,15 +65,12 @@ included. It:
 4. Uploads the Playwright HTML report as an artifact (handy for debugging).
 
 ### Triggers
-- **External (Make.com):** the primary trigger. A scheduled Make.com scenario
-  raises a `repository_dispatch` event of type `run-xing-collector` (daily at
-  2 PM, or whenever you choose). See the **"Trigger from Make.com"** section in
-  [README.md](README.md).
+- **Scheduled (GitHub cron):** daily at **01:00 UTC** (`cron: '0 1 * * *'`).
+  GitHub cron is always UTC — adjust the hour for your local time.
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
-
-> GitHub's own `schedule:` cron is intentionally **not** enabled — Make.com owns
-> the scheduling, so GitHub won't send scheduled-run emails. Add a `schedule:`
-> block to the workflow if you ever want GitHub to run it directly (cron is UTC).
+- **External (Make.com):** optional. A Make.com scenario can raise a
+  `repository_dispatch` event of type `run-xing-collector`. See the
+  **"Trigger from Make.com"** section in [README.md](README.md).
 
 ---
 
@@ -121,8 +118,10 @@ BROWSER_CHANNEL='' npx playwright test xing-all-titles-to-sheet # force bundled 
 - **Runtime:** a full run opens every unique job's detail page sequentially and
   can take ~20–25 min. The workflow's `timeout-minutes: 45` covers it. Ask if you
   want it parallelized.
-- **Scheduling is in Make.com,** not GitHub — so there's no GitHub-cron email and
-  no 60-day auto-disable to worry about. Make.com fires the run on its own clock.
+- **Scheduled runs (GitHub cron)** can be delayed a few minutes during peak load —
+  normal. Scheduled workflows are also auto-disabled after **60 days of repo
+  inactivity** (any manual run or push re-enables them). GitHub emails you if a
+  scheduled run fails.
 - **The sheet is overwritten** each run (fresh snapshot). If you'd rather append
   with a run-date column, that's a small change — just ask.
 - **Rotate the key** if it was ever exposed in plaintext; update the
