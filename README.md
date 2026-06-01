@@ -145,16 +145,18 @@ Notes:
 
 ### Triggers
 
-- **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
-- **Scheduled:** daily at `06:00 UTC` (`cron: '0 6 * * *'`). Edit the `schedule:`
-  block in the workflow to change it; remove it for manual-only runs.
 - **External (Make.com / any HTTP client):** via the GitHub *repository dispatch*
-  API — see below.
+  API — this is the primary trigger; **Make.com owns the daily schedule**. See below.
+- **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
 
-### Trigger from Make.com
+> GitHub's own `schedule:` cron is intentionally **not** used (so you don't get
+> GitHub's scheduled-run emails). Make.com handles the daily timing instead.
 
-The workflow listens for a `repository_dispatch` event of type
-`run-xing-collector`. Make.com fires it with a single HTTP request.
+### Trigger from Make.com (with daily 2 PM schedule)
+
+Make.com both **schedules** the run and **triggers** it: a scheduled scenario
+fires a single HTTP request that raises a `repository_dispatch` event of type
+`run-xing-collector`, which starts the workflow.
 
 **1. Create a GitHub token** (used by Make to authenticate):
 - *Fine-grained PAT* — repo `imransdet/job-finder`, Repository permissions →
@@ -163,7 +165,18 @@ The workflow listens for a `repository_dispatch` event of type
 
 Store it in Make as a connection/keychain value (don't hard-code it).
 
-**2. Add an HTTP → “Make a request” module** in your Make scenario:
+**2. Add the schedule (daily 2 PM)** — this replaces GitHub's cron:
+- Create a new scenario. The first module is the **trigger**.
+- Either start the scenario with a **Schedule** trigger, or click the scenario's
+  clock/schedule control at the bottom-left and set:
+  - **Run scenario:** *Every day*
+  - **Time:** `14:00`
+  - **Timezone:** set it in the scenario's *Scheduling* settings (Make uses the
+    timezone of your Make organization/scenario — pick your local zone so 2 PM
+    means 2 PM for you).
+- Make's free plan has a minimum interval (e.g. 15 min); a once-daily run is fine.
+
+**3. Add an HTTP → “Make a request” module** after the trigger:
 
 | Field | Value |
 |-------|-------|

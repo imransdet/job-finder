@@ -65,9 +65,15 @@ included. It:
 4. Uploads the Playwright HTML report as an artifact (handy for debugging).
 
 ### Triggers
+- **External (Make.com):** the primary trigger. A scheduled Make.com scenario
+  raises a `repository_dispatch` event of type `run-xing-collector` (daily at
+  2 PM, or whenever you choose). See the **"Trigger from Make.com"** section in
+  [README.md](README.md).
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
-- **Scheduled:** daily at `06:00 UTC` (`cron: '0 6 * * *'`). Change or remove the
-  `schedule:` block in the workflow to adjust. (GitHub cron is always UTC.)
+
+> GitHub's own `schedule:` cron is intentionally **not** enabled — Make.com owns
+> the scheduling, so GitHub won't send scheduled-run emails. Add a `schedule:`
+> block to the workflow if you ever want GitHub to run it directly (cron is UTC).
 
 ---
 
@@ -83,8 +89,9 @@ Edit [`search-config.json`](search-config.json) — no code changes needed:
 }
 ```
 
-- `sincePeriod`: `LAST_24_HOURS` (matches the daily cron), `LAST_7_DAYS`,
-  `LAST_30_DAYS`, or `""` for any time.
+- `sincePeriod`: `LAST_24_HOURS` (matches a daily run), `LAST_7_DAYS`,
+  `LAST_30_DAYS`, or `""` for any time. (A Make.com payload can override this
+  per run.)
 - Duplicate search keys and duplicate jobs (incl. recruiter reposts) are removed
   automatically.
 
@@ -114,9 +121,8 @@ BROWSER_CHANNEL='' npx playwright test xing-all-titles-to-sheet # force bundled 
 - **Runtime:** a full run opens every unique job's detail page sequentially and
   can take ~20–25 min. The workflow's `timeout-minutes: 45` covers it. Ask if you
   want it parallelized.
-- **Scheduled runs can be delayed** by a few minutes during GitHub peak load —
-  normal. Scheduled workflows are also disabled automatically after 60 days of
-  repo inactivity (a manual run re-enables them).
+- **Scheduling is in Make.com,** not GitHub — so there's no GitHub-cron email and
+  no 60-day auto-disable to worry about. Make.com fires the run on its own clock.
 - **The sheet is overwritten** each run (fresh snapshot). If you'd rather append
   with a run-date column, that's a small change — just ask.
 - **Rotate the key** if it was ever exposed in plaintext; update the

@@ -5,16 +5,16 @@ on:
   # Manual run from the Actions tab.
   workflow_dispatch:
   # External trigger (e.g. Make.com) via the GitHub "repository dispatch" API.
+  # Make.com owns the schedule (e.g. daily at 2 PM) and fires this event.
   # Send a POST to /repos/<owner>/<repo>/dispatches with:
   #   { "event_type": "run-xing-collector",
   #     "client_payload": { "location": "...", "since_period": "..." } }
   # client_payload is optional; omit it to use search-config.json values.
   repository_dispatch:
     types: [run-xing-collector]
-  # Daily schedule (06:00 UTC). Matches the "Past 24 hours" filter.
-  # Edit the cron or remove this block if you only want manual/external runs.
-  schedule:
-    - cron: '0 6 * * *'
+  # NOTE: GitHub's own `schedule:` cron is intentionally omitted — scheduling is
+  # handled in Make.com. Add a `schedule:` block back here if you ever want
+  # GitHub to run it directly.
 
 # Avoid overlapping runs (each run takes a while and writes the same sheet).
 concurrency:
