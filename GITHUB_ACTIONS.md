@@ -65,8 +65,10 @@ included. It:
 4. Uploads the Playwright HTML report as an artifact (handy for debugging).
 
 ### Triggers
-- **Scheduled (GitHub cron):** daily at **01:00 UTC** (`cron: '0 1 * * *'`).
-  GitHub cron is always UTC — adjust the hour for your local time.
+- **Scheduled (GitHub cron):** daily at **23:17 UTC** (`cron: '17 23 * * *'`) =
+  **01:17 local (CEST)**. GitHub cron is fixed UTC and ignores DST, and runs at
+  `:00` are heavily delayed — hence 23:17. Scheduled runs are still best-effort
+  and can be delayed 10–60 min.
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
 - **External (Make.com):** optional. A Make.com scenario can raise a
   `repository_dispatch` event of type `run-xing-collector`. See the
