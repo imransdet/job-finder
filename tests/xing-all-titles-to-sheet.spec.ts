@@ -28,15 +28,48 @@ function jobId(url: string): string {
   return url.match(/-(\d+)(?:[/?#]|$)/)?.[1] ?? url;
 }
 
+// Gender/diversity notations that appear in many German/English titles and
+// must be ignored when deciding if two postings are the same job.
+const GENDER_RE = /\b(m\/w\/d|m\/f\/d|w\/m\/d|d\/f\/m|m\/f\/x|m\/w\/x|w\/m\/x|f\/m\/d|f\/m\/x|m\/w\/d\/x|all genders?|gn)\b/gi;
+// Function words (DE + EN) + work-mode descriptors dropped so word-order and
+// filler variants (e.g. "(Home-Office)" vs "im Home-Office") collapse.
+const STOPWORDS = new Set(
+  ['im', 'in', 'der', 'die', 'das', 'den', 'the', 'for', 'fuer', 'für', 'an', 'at',
+   'als', 'a', 'und', 'and', 'mit', 'with', 'von', 'of', 'zur', 'zum', 'bei', 'm', 'w', 'd', 'f', 'x',
+   // work mode / location filler (don't define the role identity)
+   'remote', 'hybrid', 'onsite', 'site', 'home', 'office', 'homeoffice', 'telearbeit']
+);
+
 /**
- * Dedupe key for a job. Recruiters often repost the same role with different
- * job IDs, so we key on normalized title + company (collapsing reposts). Falls
- * back to the job ID when the card title is missing.
+ * Normalize a job title so near-duplicate postings collapse: lowercase, drop
+ * parentheticals (e.g. "(m/w/d)", "(Home-Office)"), gender codes, percentages
+ * and punctuation, remove filler words, then sort the remaining tokens (so
+ * word-order variants like "QA Engineering Manager" vs "Manager QA Engineering"
+ * match). Distinct roles (e.g. "... Python" vs "... Java") still differ.
+ */
+function normTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ') // remove parentheticals
+    .replace(/\d+\s*%/g, ' ') // remove "100%"
+    .replace(GENDER_RE, ' ')
+    .replace(/[^a-z0-9äöüß]+/gi, ' ') // punctuation -> space
+    .split(/\s+/)
+    .filter((t) => t && !STOPWORDS.has(t))
+    .sort()
+    .join(' ')
+    .trim();
+}
+
+/**
+ * Dedupe key for a job: normalized title + company. Collapses recruiter
+ * reposts and bilingual / gender-notation / word-order variants of the same
+ * role. Falls back to the job ID when the card title is missing.
  */
 function dedupeKey(card: JobCard): string {
-  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-  const title = norm(card.title);
-  return title ? `${title}::${norm(card.company)}` : jobId(card.url);
+  const company = card.company.toLowerCase().replace(/\s+/g, ' ').trim();
+  const title = normTitle(card.title);
+  return title ? `${title}::${company}` : jobId(card.url);
 }
 
 /**
