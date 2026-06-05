@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JobRow } from './sheets';
 
-// Z.AI (Zhipu GLM) — OpenAI-compatible chat completions API.
-const BASE_URL = process.env.ZAI_BASE_URL || 'https://api.z.ai/api/paas/v4';
+// Z.AI (Zhipu GLM) — Anthropic-compatible coding endpoint (the one the GLM
+// Coding Plan / Claude Code use). Messages API: POST /v1/messages.
+const BASE_URL = process.env.ZAI_BASE_URL || 'https://api.z.ai/api/anthropic';
 const MODEL = process.env.ZAI_MODEL || 'glm-4.6';
 const API_KEY = process.env.ZAI_API_KEY;
 
@@ -66,23 +67,24 @@ function parseResult(content: string): MatchResult {
 export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<MatchResult> {
   if (!API_KEY) throw new Error('Missing ZAI_API_KEY in environment/.env');
 
+  // Anthropic Messages API shape.
   const body = {
     model: MODEL,
+    max_tokens: 300,
     temperature: 0,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt(profile, job) },
-    ],
-    response_format: { type: 'json_object' },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: buildUserPrompt(profile, job) }],
   };
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const res = await fetch(`${BASE_URL}/chat/completions`, {
+      const res = await fetch(`${BASE_URL}/v1/messages`, {
         method: 'POST',
         headers: {
+          'x-api-key': API_KEY,
           Authorization: `Bearer ${API_KEY}`,
+          'anthropic-version': '2023-06-01',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -92,7 +94,11 @@ export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<Ma
         throw new Error(`Z.AI ${res.status}: ${text.slice(0, 200)}`);
       }
       const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content ?? '';
+      // Anthropic returns { content: [{ type: 'text', text: '...' }] }.
+      const content =
+        Array.isArray(data?.content)
+          ? data.content.map((b: { text?: string }) => b.text ?? '').join('')
+          : data?.content ?? '';
       return parseResult(content);
     } catch (err) {
       lastErr = err;
