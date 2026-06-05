@@ -6,6 +6,7 @@ import { XingJobSearchPage, JobCard } from './pages/XingJobSearchPage';
 import { scrapeJobDetail } from '../lib/scrape';
 import { initSheet, appendJobs, keepTopJobs, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
+import { pushApplied, trackerEnabled } from '../lib/tracker';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 60);
 const TOP_N = Number(process.env.TOP_N ?? 5);
@@ -168,16 +169,43 @@ test.describe('Xing multi-title job collection', () => {
     console.log(`\nNew unique jobs: ${totalNew}; matched (≥${MATCH_THRESHOLD}): ${totalMatched}`);
     expect(seen.size).toBeGreaterThan(0);
 
+    // The top N matches (same set kept in the sheet).
+    matched.sort((a, b) => b.matchScore - a.matchScore);
+    const topJobs = matched.slice(0, TOP_N);
+
     await test.step(`Keep only the top ${TOP_N} by match score`, async () => {
       if (isSmoke) {
-        matched.sort((a, b) => b.matchScore - a.matchScore);
         console.log(`SMOKE — would keep top ${TOP_N} of ${matched.length} matched:`);
-        matched.slice(0, TOP_N).forEach((j) => console.log(`  ${j.matchScore} ${j.title} — ${j.company}`));
+        topJobs.forEach((j) => console.log(`  ${j.matchScore} ${j.title} — ${j.company}`));
         return;
       }
       const result = await keepTopJobs(TOP_N);
       console.log(`Kept top ${result.kept} of ${result.total} matched jobs in the sheet.`);
       expect(result.kept).toBeLessThanOrEqual(TOP_N);
+    });
+
+    await test.step(`Push the top ${TOP_N} to the Job Tracker API`, async () => {
+      if (!trackerEnabled()) {
+        console.log('JOB_TRACKER_API_KEY not set — skipping tracker push.');
+        return;
+      }
+      if (isSmoke) {
+        console.log(`SMOKE — would push ${topJobs.length} jobs to the tracker.`);
+        return;
+      }
+      let pushed = 0;
+      let dupes = 0;
+      for (const j of topJobs) {
+        const r = await pushApplied(j);
+        if (r.ok) {
+          pushed++;
+          if (r.duplicate) dupes++;
+          console.log(`  tracker ${r.duplicate ? 'dup' : 'new'} (${r.status}): ${j.title} — ${j.company}`);
+        } else {
+          console.log(`  tracker FAILED (${r.status}): ${j.title} — ${j.company} — ${r.error}`);
+        }
+      }
+      console.log(`Pushed ${pushed}/${topJobs.length} to tracker (${dupes} duplicates).`);
     });
   });
 });

@@ -40,6 +40,8 @@ jobs:
       GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
       # Z.AI key for profile match scoring (GitHub secret).
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+      # Job Tracker API key to push the top matches (GitHub secret; optional).
+      JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
       # Optional matching knobs (repo variables, with defaults).
       MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '60' }}
       TOP_N: ${{ vars.TOP_N || '5' }}

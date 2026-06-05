@@ -64,6 +64,10 @@ Requires `ZAI_API_KEY` (see [`.env`](.env.example) locally / GitHub secret in CI
 Edit your profile in [`profile.md`](profile.md) to change how matches are scored.
 Tune `MATCH_THRESHOLD` and `TOP_N` via env vars.
 
+Finally, if `JOB_TRACKER_API_KEY` is set, the same top `TOP_N` are **pushed to the
+Job Tracker API** (`POST /api/ingest/applied`, idempotent on company+title) so the
+list is available there too. Unset the key to skip the push.
+
 ### Editing the search keys — `search-config.json`
 
 Add/remove search terms here (no code changes needed):
@@ -137,6 +141,7 @@ Add these four secrets (names must match exactly):
 | `GOOGLE_SHEET_ID`     | The spreadsheet ID from its URL |
 | `GOOGLE_SHEET_NAME`   | The tab name, e.g. `xing-raw-data` |
 | `ZAI_API_KEY`         | Your Z.AI (Zhipu GLM) API key, for match scoring |
+| `JOB_TRACKER_API_KEY` | (Optional) Job Tracker ingest API key, to push top matches |
 
 Or via the GitHub CLI:
 
@@ -146,6 +151,7 @@ gh secret set GOOGLE_PRIVATE_KEY   < private_key.txt   # file containing the key
 gh secret set GOOGLE_SHEET_ID      --body "your-spreadsheet-id"
 gh secret set GOOGLE_SHEET_NAME    --body "xing-raw-data"
 gh secret set ZAI_API_KEY          --body "your-zai-api-key"
+gh secret set JOB_TRACKER_API_KEY  --body "your-ingest-api-key"   # optional
 ```
 
 Optional repo **variables** (not secrets): `MATCH_THRESHOLD` (default 60) and
