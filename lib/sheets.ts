@@ -63,11 +63,31 @@ function getConfig() {
   return { spreadsheetId, sheetName };
 }
 
+/**
+ * Normalize the service-account private key from an env var / GitHub secret.
+ * Handles: accidental surrounding quotes, escaped "\n" sequences, and stray
+ * CRs — any of which otherwise yield "DECODER routines::unsupported".
+ */
+function normalizePrivateKey(raw: string): string {
+  let key = raw.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, '\n').replace(/\r/g, '');
+}
+
 function getSheetsClient() {
-  const email = process.env.GOOGLE_CLIENT_EMAIL;
-  const key = (process.env.GOOGLE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n');
+  const email = process.env.GOOGLE_CLIENT_EMAIL?.trim();
+  const key = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY ?? '');
   if (!email || !key) {
     throw new Error('Missing GOOGLE_CLIENT_EMAIL / GOOGLE_PRIVATE_KEY in .env');
+  }
+  if (!key.includes('BEGIN PRIVATE KEY')) {
+    throw new Error(
+      'GOOGLE_PRIVATE_KEY does not look like a PEM key. In GitHub, paste the ' +
+      'private_key value WITHOUT surrounding quotes (keep the \\n escapes, or ' +
+      'paste the multi-line PEM as-is).'
+    );
   }
   const auth = new google.auth.JWT({
     email,
