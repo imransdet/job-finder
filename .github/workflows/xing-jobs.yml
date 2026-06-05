@@ -38,6 +38,11 @@ jobs:
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
       GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
       GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
+      # Z.AI key for profile match scoring (GitHub secret).
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+      # Optional matching knobs (repo variables, with defaults).
+      MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '60' }}
+      TOP_N: ${{ vars.TOP_N || '5' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

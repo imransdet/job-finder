@@ -39,18 +39,30 @@ Selectors were verified against the live site (May 2026). Because this drives a
 live third-party site, the markup may change over time — the Page Object
 centralizes selectors so updates are one-file changes.
 
-## Collect many job titles, dedupe, write to Sheets
+## Collect, match against your profile, keep top 5
 
-`tests/xing-all-titles-to-sheet.spec.ts` searches **every title** in
-`search-config.json` (Past 24h, in the configured location), filters out
-non-QA/testing noise, **dedupes** jobs across titles by job ID, scrapes each
-unique job once, and writes the result to the sheet.
+`tests/xing-all-titles-to-sheet.spec.ts` is the main pipeline. For **each** title
+in `search-config.json` it:
+
+1. searches (configured location, Past 24h) and keeps QA/testing-relevant cards,
+2. scrapes each new (deduped) job's detail page,
+3. **scores the job against your profile** ([`profile.md`](profile.md)) via
+   **Z.AI (Zhipu GLM)**, and
+4. writes the job to the sheet **only if the score ≥ `MATCH_THRESHOLD`** (default 60).
+
+Then, after all titles, it **keeps only the top `TOP_N` (default 5)** rows by match
+score and deletes the rest. The sheet gains **`Match Score`** and **`Match Reason`**
+columns (score is column A, so the sheet is pre-sorted by fit).
 
 ```bash
 npx playwright test xing-all-titles-to-sheet --headed
 # Smoke-test the first N titles without writing to the sheet:
 LIMIT=4 npx playwright test xing-all-titles-to-sheet --headed
 ```
+
+Requires `ZAI_API_KEY` (see [`.env`](.env.example) locally / GitHub secret in CI).
+Edit your profile in [`profile.md`](profile.md) to change how matches are scored.
+Tune `MATCH_THRESHOLD` and `TOP_N` via env vars.
 
 ### Editing the search keys — `search-config.json`
 
@@ -124,6 +136,7 @@ Add these four secrets (names must match exactly):
 | `GOOGLE_PRIVATE_KEY`  | `private_key` from the JSON (paste as-is, including the `\n`) |
 | `GOOGLE_SHEET_ID`     | The spreadsheet ID from its URL |
 | `GOOGLE_SHEET_NAME`   | The tab name, e.g. `xing-raw-data` |
+| `ZAI_API_KEY`         | Your Z.AI (Zhipu GLM) API key, for match scoring |
 
 Or via the GitHub CLI:
 
@@ -132,7 +145,11 @@ gh secret set GOOGLE_CLIENT_EMAIL  --body "my-job-finder@your-project.iam.gservi
 gh secret set GOOGLE_PRIVATE_KEY   < private_key.txt   # file containing the key
 gh secret set GOOGLE_SHEET_ID      --body "your-spreadsheet-id"
 gh secret set GOOGLE_SHEET_NAME    --body "xing-raw-data"
+gh secret set ZAI_API_KEY          --body "your-zai-api-key"
 ```
+
+Optional repo **variables** (not secrets): `MATCH_THRESHOLD` (default 60) and
+`TOP_N` (default 5).
 
 Notes:
 - **Private key:** paste exactly as it appears in the JSON (single line with `\n`

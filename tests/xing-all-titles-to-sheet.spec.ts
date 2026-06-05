@@ -4,7 +4,11 @@ import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { XingJobSearchPage, JobCard } from './pages/XingJobSearchPage';
 import { scrapeJobDetail } from '../lib/scrape';
-import { writeJobsToSheet, JobRow } from '../lib/sheets';
+import { initSheet, appendJobs, keepTopJobs, JobRow } from '../lib/sheets';
+import { scoreJob, loadProfile } from '../lib/match';
+
+const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 60);
+const TOP_N = Number(process.env.TOP_N ?? 5);
 
 // Search keys live in search-config.json so they can be edited without touching code.
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,16 +52,19 @@ function isRelevant(title: string): boolean {
 }
 
 test.describe('Xing multi-title job collection', () => {
-  test.setTimeout(30 * 60_000); // up to 30 min: 26 searches + scraping all unique jobs
+  // Per search: scrape + score each job; longer budget for the LLM calls.
+  test.setTimeout(40 * 60_000);
 
-  test('search all QA titles (Past 24h, Germany), dedupe, write to Google Sheet', async ({ page }) => {
+  test('per-search scrape + profile match (Z.AI), write matches, keep top 5', async ({ page }) => {
     const xing = new XingJobSearchPage(page);
+    const isSmoke = !!process.env.LIMIT;
+    const scoringEnabled = !!process.env.ZAI_API_KEY;
+    if (!isSmoke && !scoringEnabled) {
+      throw new Error('ZAI_API_KEY is required for scoring. Set it in .env (local) or as a GitHub secret (CI).');
+    }
+    if (scoringEnabled) loadProfile(); // fail fast if profile.md is missing
 
-    // Dedupe store: signature -> { card, terms that found it }
-    const unique = new Map<string, { card: JobCard; terms: Set<string> }>();
-
-    // Dedupe the search keys themselves (case-insensitive), in case the JSON
-    // ends up with repeats after edits.
+    // Dedupe the search keys themselves (case-insensitive).
     const seenTitle = new Set<string>();
     const dedupedTitles = JOB_TITLES.filter((t) => {
       const k = t.toLowerCase().trim();
@@ -65,79 +72,79 @@ test.describe('Xing multi-title job collection', () => {
       seenTitle.add(k);
       return true;
     });
-    if (dedupedTitles.length !== JOB_TITLES.length) {
-      console.log(`Removed ${JOB_TITLES.length - dedupedTitles.length} duplicate search key(s) from config.`);
-    }
 
     // Optional smoke-test knob: LIMIT=3 only searches the first 3 titles.
     const titles = process.env.LIMIT ? dedupedTitles.slice(0, Number(process.env.LIMIT)) : dedupedTitles;
 
-    await test.step('Collect job cards for all titles', async () => {
-      // First navigation also triggers the cookie consent; accept it once.
-      await page.goto(xing.buildSearchUrl(titles[0], LOCATION, SINCE_PERIOD), { waitUntil: 'domcontentloaded' });
-      await xing.acceptCookies();
+    // Fresh snapshot: clear the sheet and write the header once.
+    if (!isSmoke) await initSheet();
 
-      let totalSeen = 0;
-      let totalRelevant = 0;
-      for (const [i, title] of titles.entries()) {
+    // First navigation also triggers the cookie consent; accept it once.
+    await page.goto(xing.buildSearchUrl(titles[0], LOCATION, SINCE_PERIOD), { waitUntil: 'domcontentloaded' });
+    await xing.acceptCookies();
+
+    const seen = new Set<string>(); // global dedupe across all searches
+    const matched: JobRow[] = []; // jobs that passed the threshold (for smoke logging)
+    let totalNew = 0;
+    let totalMatched = 0;
+
+    for (const [i, title] of titles.entries()) {
+      await test.step(`Search "${title}" → scrape → score → write matches`, async () => {
         const cards = await xing.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
-        totalSeen += cards.length;
         const relevant = cards.filter((c) => isRelevant(c.title));
-        totalRelevant += relevant.length;
+        let newCount = 0;
+        let matchedCount = 0;
+
         for (const card of relevant) {
           const key = dedupeKey(card);
-          const entry = unique.get(key);
-          if (entry) {
-            entry.terms.add(title);
-          } else {
-            unique.set(key, { card, terms: new Set([title]) });
-          }
-        }
-        console.log(
-          `[${i + 1}/${titles.length}] "${title}": ${cards.length} cards, ${relevant.length} QA-relevant | unique so far: ${unique.size}`
-        );
-      }
-      console.log(`\nCards seen: ${totalSeen}; QA-relevant: ${totalRelevant}; unique after dedupe: ${unique.size}`);
-      expect(unique.size).toBeGreaterThan(0);
-    });
+          if (seen.has(key)) continue; // already handled by an earlier search
+          seen.add(key);
 
-    const jobs: JobRow[] = [];
-    await test.step('View each unique job and scrape its data', async () => {
-      const entries = [...unique.values()];
-      // Final safety dedupe on the scraped data: skip if the same job id or the
-      // same title+company has already been recorded.
-      const seenId = new Set<string>();
-      const seenSig = new Set<string>();
-      for (const [i, { card, terms }] of entries.entries()) {
-        try {
-          const job = await scrapeJobDetail(page, card);
-          job.foundVia = [...terms].join(', ');
-          const id = jobId(job.url);
-          const sig = `${job.title.toLowerCase().trim()}::${job.company.toLowerCase().trim()}`;
-          if (seenId.has(id) || seenSig.has(sig)) {
-            console.log(`[${i + 1}/${entries.length}] DUPLICATE skipped: ${job.title} — ${job.company}`);
+          let job: JobRow;
+          try {
+            job = await scrapeJobDetail(page, card);
+          } catch (err) {
+            console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
             continue;
           }
-          seenId.add(id);
-          seenSig.add(sig);
-          jobs.push(job);
-          console.log(`[${i + 1}/${entries.length}] ${job.title} — ${job.company} — ${job.location}`);
-        } catch (err) {
-          console.log(`[${i + 1}/${entries.length}] FAILED ${card.url}: ${(err as Error).message}`);
-        }
-      }
-      expect(jobs.length).toBeGreaterThan(0);
-    });
+          job.foundVia = title;
+          newCount++;
 
-    await test.step('Write the deduped jobs to the Google Sheet', async () => {
-      if (process.env.LIMIT) {
-        console.log(`LIMIT set — skipping sheet write. Would have written ${jobs.length} jobs.`);
-        jobs.forEach((j) => console.log(`  • ${j.title} [${j.foundVia}]`));
+          if (scoringEnabled) {
+            const m = await scoreJob(job);
+            job.matchScore = m.score;
+            job.matchReason = m.reason;
+          }
+
+          if (job.matchScore >= MATCH_THRESHOLD) {
+            matched.push(job);
+            matchedCount++;
+            if (!isSmoke) await appendJobs([job]); // write match immediately
+          }
+          console.log(`    score ${String(job.matchScore).padStart(3)} | ${job.title} — ${job.company}`);
+        }
+
+        totalNew += newCount;
+        totalMatched += matchedCount;
+        console.log(
+          `[${i + 1}/${titles.length}] "${title}": ${relevant.length} relevant, ${newCount} new, ${matchedCount} matched (≥${MATCH_THRESHOLD})`
+        );
+      });
+    }
+
+    console.log(`\nNew unique jobs: ${totalNew}; matched (≥${MATCH_THRESHOLD}): ${totalMatched}`);
+    expect(seen.size).toBeGreaterThan(0);
+
+    await test.step(`Keep only the top ${TOP_N} by match score`, async () => {
+      if (isSmoke) {
+        matched.sort((a, b) => b.matchScore - a.matchScore);
+        console.log(`SMOKE — would keep top ${TOP_N} of ${matched.length} matched:`);
+        matched.slice(0, TOP_N).forEach((j) => console.log(`  ${j.matchScore} ${j.title} — ${j.company}`));
         return;
       }
-      const result = await writeJobsToSheet(jobs);
-      console.log(`Wrote ${result.rows} unique jobs to "${result.sheetName}"`);
-      expect(result.rows).toBe(jobs.length);
+      const result = await keepTopJobs(TOP_N);
+      console.log(`Kept top ${result.kept} of ${result.total} matched jobs in the sheet.`);
+      expect(result.kept).toBeLessThanOrEqual(TOP_N);
     });
   });
 });

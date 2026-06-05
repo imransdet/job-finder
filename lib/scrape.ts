@@ -64,5 +64,7 @@ export async function scrapeJobDetail(page: Page, card: JobCard): Promise<JobRow
     description,
     foundVia: '',
     scrapedAt: new Date().toISOString(),
+    matchScore: 0,
+    matchReason: '',
   };
 }

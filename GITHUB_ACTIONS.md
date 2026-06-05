@@ -42,6 +42,7 @@ Create these four secrets (names must match exactly):
 | `GOOGLE_PRIVATE_KEY`  | The `private_key` from the JSON (see note below) |
 | `GOOGLE_SHEET_ID`     | `1Cc6D0W6Xv9RB9E8tbosxUuqngnakqY5r270IXEWsCQ4` |
 | `GOOGLE_SHEET_NAME`   | `xing-raw-data` |
+| `ZAI_API_KEY`         | Your Z.AI (Zhipu GLM) API key (profile match scoring) |
 
 **Private key format:** paste the `private_key` value exactly as it appears in
 the JSON — a single line containing `\n` sequences, e.g.
