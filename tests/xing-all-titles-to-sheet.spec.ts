@@ -7,6 +7,7 @@ import { scrapeJobDetail } from '../lib/scrape';
 import { initSheet, appendJobs, keepTopJobs, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
+import { publishSite } from '../lib/publish';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 60);
 const TOP_N = Number(process.env.TOP_N ?? 5);
@@ -182,6 +183,13 @@ test.describe('Xing multi-title job collection', () => {
       const result = await keepTopJobs(TOP_N);
       console.log(`Kept top ${result.kept} of ${result.total} matched jobs in the sheet.`);
       expect(result.kept).toBeLessThanOrEqual(TOP_N);
+    });
+
+    await test.step('Publish the top matches endpoint (site/)', async () => {
+      // Generates site/top-matches.json + site/index.html; the workflow deploys
+      // these to GitHub Pages so the list is shareable via a public URL.
+      const out = publishSite(topJobs, { location: LOCATION, sincePeriod: SINCE_PERIOD });
+      console.log(`Published ${out.count} matches to ${out.jsonPath}`);
     });
 
     await test.step(`Push the top ${TOP_N} to the Job Tracker API`, async () => {

@@ -19,6 +19,12 @@ on:
   schedule:
     - cron: '17 23 * * *'
 
+# Permissions needed to deploy the top-matches endpoint to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 # Avoid overlapping runs (each run takes a while and writes the same sheet).
 concurrency:
   group: xing-jobs
@@ -28,6 +34,10 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Publishes site/ (top-matches.json + index.html) to GitHub Pages.
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     env:
       CI: 'true'
       HEADLESS: 'true'
@@ -76,3 +86,21 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+      # Publish the top-matches endpoint (site/top-matches.json + index.html)
+      # to GitHub Pages. Only on a successful run, so a failure keeps the last
+      # good page. Requires Pages "Source: GitHub Actions" in repo settings.
+      - name: Configure Pages
+        if: success()
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: success()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        if: success()
+        uses: actions/deploy-pages@v4

@@ -6,3 +6,4 @@ blob-report/
 *.env
 service-account*.json
 *-copy.json
+site/

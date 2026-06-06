@@ -68,6 +68,21 @@ Finally, if `JOB_TRACKER_API_KEY` is set, the same top `TOP_N` are **pushed to t
 Job Tracker API** (`POST /api/ingest/applied`, idempotent on company+title) so the
 list is available there too. Unset the key to skip the push.
 
+## Public "top matches" endpoint (GitHub Pages)
+
+Each run also generates a shareable endpoint in `site/` and the workflow deploys
+it to **GitHub Pages** — no server or keys needed:
+
+- **JSON API:** `https://imransdet.github.io/job-finder/top-matches.json`
+- **Web view:** `https://imransdet.github.io/job-finder/`
+
+The JSON contains `generatedAt`, `location`, `sincePeriod`, `count`, and a `jobs`
+array (rank, matchScore, matchReason, title, company, location, workplace,
+employmentType, salary, posted, url, foundVia).
+
+**One-time setup:** repo **Settings → Pages → Source: GitHub Actions**. After the
+next successful run, the URLs above go live (and refresh on every run).
+
 ### Editing the search keys — `search-config.json`
 
 Add/remove search terms here (no code changes needed):
