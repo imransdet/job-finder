@@ -53,7 +53,7 @@ jobs:
       # Job Tracker API key to push the top matches (GitHub secret; optional).
       JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
       # Optional matching knobs (repo variables, with defaults).
-      MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '60' }}
+      MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '0' }}
       TOP_N: ${{ vars.TOP_N || '5' }}
     steps:
       - name: Checkout

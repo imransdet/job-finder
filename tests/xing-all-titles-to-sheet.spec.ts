@@ -9,7 +9,9 @@ import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
 import { publishSite } from '../lib/publish';
 
-const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 60);
+// 0 = keep the top N by score regardless of score (the list is never empty).
+// Set a floor (e.g. 60) to only keep jobs at/above that score.
+const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 0);
 const TOP_N = Number(process.env.TOP_N ?? 5);
 
 // Search keys live in search-config.json so they can be edited without touching code.

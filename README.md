@@ -48,10 +48,12 @@ in `search-config.json` it:
 2. scrapes each new (deduped) job's detail page,
 3. **scores the job against your profile** ([`profile.md`](profile.md)) via
    **Z.AI (Zhipu GLM)**, and
-4. writes the job to the sheet **only if the score ≥ `MATCH_THRESHOLD`** (default 60).
+4. records the job with its score.
 
 Then, after all titles, it **keeps only the top `TOP_N` (default 5)** rows by match
-score and deletes the rest. The sheet gains **`Match Score`** and **`Match Reason`**
+score and deletes the rest. By default (`MATCH_THRESHOLD=0`) the top N are always
+kept so the list is never empty; set `MATCH_THRESHOLD` (e.g. 60) to only keep jobs
+at/above that score. The sheet gains **`Match Score`** and **`Match Reason`**
 columns (score is column A, so the sheet is pre-sorted by fit).
 
 ```bash
