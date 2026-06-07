@@ -16,6 +16,12 @@ Engineer across fintech, IoT, and enterprise platforms.
 - Open to remote, hybrid, and on-site roles in Germany. Willing to travel.
 - Notice period 30 days (flexible).
 
+## Languages
+- English: fluent / professional working proficiency. Works in English.
+- German: A1 (beginner) — just started learning, NOT yet usable at work.
+- Therefore roles that require working German are currently a poor fit. The
+  candidate needs an English-speaking or English-friendly working environment.
+
 ## Target roles
 QA Automation Engineer, Senior/Lead QA Engineer, SDET, Software Test Engineer,
 Test Automation Engineer, Quality Assurance Engineer. Software QA focus
@@ -53,6 +59,16 @@ Test Automation Engineer, Quality Assurance Engineer. Software QA focus
 ## Scoring guidance (how to judge a match)
 Higher score when the job is a **software** QA/test-automation role (especially
 Playwright/Cypress/Selenium, API testing, CI/CD), is in **Germany** (or remote
-within Germany), and matches seniority (mid/senior/lead). Lower score for
-hardware/electronics/manufacturing test or quality-management (QM) roles,
-roles requiring fluent German only, or locations outside Germany.
+within Germany), matches seniority (mid/senior/lead), AND can be done in
+**English**.
+
+**Language is a hard constraint.** The candidate is at German A1 (beginner).
+Strongly penalize any role that requires working German — e.g. mentions of
+"fließend/verhandlungssicher Deutsch", "sehr gute Deutschkenntnisse", German at
+B1/B2/C1, or where German is clearly the working language. Such roles should
+score low (roughly ≤ 40) even if the technical fit is perfect. Give high scores
+to roles that are explicitly English-speaking, international, or list English as
+the working language and German as optional/"nice to have".
+
+Also lower the score for hardware/electronics/manufacturing test or
+quality-management (QM) roles, and for locations outside Germany.
