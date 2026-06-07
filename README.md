@@ -182,9 +182,9 @@ Notes:
 
 ### Triggers
 
-- **Scheduled (GitHub cron):** daily at **23:17 UTC** (`cron: '17 23 * * *'`),
-  which is **01:17 local (CEST)**. GitHub cron is fixed UTC and ignores DST, so
-  in winter (CET) it lands at 00:17 local — adjust the hour if needed.
+- **Scheduled (GitHub cron):** daily at **22:01 UTC** (`cron: '1 22 * * *'`),
+  which is **00:01 local (CEST)** — start of the day. GitHub cron is fixed UTC and ignores DST, so
+  in winter (CET) it lands at 23:01 local — use `'1 23 * * *'` for 00:01 then.
 - **Manual:** Actions tab → *Xing job collector* → **Run workflow**.
 - **External (Make.com / any HTTP client):** via the GitHub *repository dispatch*
   API (optional; usable alongside the cron). See below.
