@@ -70,20 +70,17 @@ Finally, if `JOB_TRACKER_API_KEY` is set, the same top `TOP_N` are **pushed to t
 Job Tracker API** (`POST /api/ingest/applied`, idempotent on company+title) so the
 list is available there too. Unset the key to skip the push.
 
-## Public "top matches" endpoint (GitHub Pages)
+## Sharing the top matches
 
-Each run also generates a shareable endpoint in `site/` and the workflow deploys
-it to **GitHub Pages** — no server or keys needed:
+The top matches are shared via the **Google Sheet** itself — the consuming
+project (e.g. the Job Tracker) reads the `xing-raw-data` tab directly with its
+own Google service account. No public web endpoint is needed (and GitHub Pages
+isn't available on a private repo on the free plan).
 
-- **JSON API:** `https://imransdet.github.io/job-finder/top-matches.json`
-- **Web view:** `https://imransdet.github.io/job-finder/`
-
-The JSON contains `generatedAt`, `location`, `sincePeriod`, `count`, and a `jobs`
-array (rank, matchScore, matchReason, title, company, location, workplace,
-employmentType, salary, posted, url, foundVia).
-
-**One-time setup:** repo **Settings → Pages → Source: GitHub Actions**. After the
-next successful run, the URLs above go live (and refresh on every run).
+To wire it up: share the spreadsheet with the consuming project's service-account
+email (Viewer is enough). See **[API.md](API.md)** for the sheet ID, tab name,
+and the column contract. Optionally, set `JOB_TRACKER_API_KEY` to *push* the top N
+to the Job Tracker ingest API instead of pulling from the sheet.
 
 ### Editing the search keys — `search-config.json`
 
