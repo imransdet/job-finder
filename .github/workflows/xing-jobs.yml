@@ -12,12 +12,13 @@ on:
   # client_payload is optional; omit it to use search-config.json values.
   repository_dispatch:
     types: [run-xing-collector]
-  # Daily self-run at 00:01 local (CEST, UTC+2) = 22:01 UTC — right at the start
-  # of the day. NOTE: GitHub cron is fixed UTC and does NOT follow DST; in winter
-  # (CET, UTC+1) this lands at 23:01 local — use '1 23 * * *' for 00:01 in winter.
-  # GitHub scheduled runs are best-effort and may start a few minutes late.
+  # Daily self-run at 00:30 local (CEST, UTC+2) = 22:30 UTC. The :30 minute
+  # avoids GitHub's congested top-of-hour queue. NOTE: GitHub cron is fixed UTC
+  # and does NOT follow DST; in winter (CET, UTC+1) this lands at 23:30 local —
+  # use '30 23 * * *' for 00:30 in winter. Scheduled runs are best-effort and
+  # may still start a few minutes late.
   schedule:
-    - cron: '1 22 * * *'
+    - cron: '30 22 * * *'
 
 # Avoid overlapping runs (each run takes a while and writes the same sheet).
 concurrency:
