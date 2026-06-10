@@ -56,6 +56,10 @@ kept so the list is never empty; set `MATCH_THRESHOLD` (e.g. 60) to only keep jo
 at/above that score. The sheet gains **`Match Score`** and **`Match Reason`**
 columns (score is column A, so the sheet is pre-sorted by fit).
 
+**Resilient to partial failures:** if a search key errors out mid-run (e.g. 10 of
+15 done), that key is logged and skipped — the run continues and still ranks the
+top matches from whatever was collected, rather than failing with nothing.
+
 ```bash
 npx playwright test xing-all-titles-to-sheet --headed
 # Smoke-test the first N titles without writing to the sheet:

@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { XingJobSearchPage, JobCard } from './pages/XingJobSearchPage';
 import { scrapeJobDetail } from '../lib/scrape';
-import { initSheet, appendJobs, keepTopJobs, JobRow } from '../lib/sheets';
+import { initSheet, appendJobs, writeJobsToSheet, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
 
@@ -120,70 +120,100 @@ test.describe('Xing multi-title job collection', () => {
     await xing.acceptCookies();
 
     const seen = new Set<string>(); // global dedupe across all searches
-    const matched: JobRow[] = []; // jobs that passed the threshold (for smoke logging)
+    const matched: JobRow[] = []; // all scored jobs collected this run (authoritative)
+    const failedTitles: string[] = []; // search keys that errored out
     let totalNew = 0;
-    let totalMatched = 0;
 
     for (const [i, title] of titles.entries()) {
-      await test.step(`Search "${title}" → scrape → score → write matches`, async () => {
-        const cards = await xing.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
-        const relevant = cards.filter((c) => isRelevant(c.title));
-        let newCount = 0;
-        let matchedCount = 0;
+      await test.step(`Search "${title}" → scrape → score`, async () => {
+        // Collected for this title so we can still write partial data if a later
+        // step (or the whole run) is interrupted.
+        const titleMatched: JobRow[] = [];
+        try {
+          const cards = await xing.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
+          const relevant = cards.filter((c) => isRelevant(c.title));
+          let newCount = 0;
 
-        for (const card of relevant) {
-          const key = dedupeKey(card);
-          if (seen.has(key)) continue; // already handled by an earlier search
-          seen.add(key);
+          for (const card of relevant) {
+            const key = dedupeKey(card);
+            if (seen.has(key)) continue; // already handled by an earlier search
+            seen.add(key);
 
-          let job: JobRow;
-          try {
-            job = await scrapeJobDetail(page, card);
-          } catch (err) {
-            console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
-            continue;
+            let job: JobRow;
+            try {
+              job = await scrapeJobDetail(page, card);
+            } catch (err) {
+              console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
+              continue;
+            }
+            job.foundVia = title;
+            newCount++;
+
+            if (scoringEnabled) {
+              const m = await scoreJob(job);
+              job.matchScore = m.score;
+              job.matchReason = m.reason;
+            }
+
+            if (job.matchScore >= MATCH_THRESHOLD) {
+              matched.push(job);
+              titleMatched.push(job);
+            }
+            console.log(`    score ${String(job.matchScore).padStart(3)} | ${job.title} — ${job.company}`);
           }
-          job.foundVia = title;
-          newCount++;
 
-          if (scoringEnabled) {
-            const m = await scoreJob(job);
-            job.matchScore = m.score;
-            job.matchReason = m.reason;
-          }
-
-          if (job.matchScore >= MATCH_THRESHOLD) {
-            matched.push(job);
-            matchedCount++;
-            if (!isSmoke) await appendJobs([job]); // write match immediately
-          }
-          console.log(`    score ${String(job.matchScore).padStart(3)} | ${job.title} — ${job.company}`);
+          totalNew += newCount;
+          console.log(
+            `[${i + 1}/${titles.length}] "${title}": ${relevant.length} relevant, ${newCount} new, ${titleMatched.length} kept`
+          );
+        } catch (err) {
+          // A failed search key must NOT abort the run — record it, keep the
+          // jobs gathered before the failure, and continue to the next key.
+          failedTitles.push(title);
+          console.log(
+            `[${i + 1}/${titles.length}] "${title}" SEARCH FAILED: ${(err as Error).message} — continuing with collected data`
+          );
         }
 
-        totalNew += newCount;
-        totalMatched += matchedCount;
-        console.log(
-          `[${i + 1}/${titles.length}] "${title}": ${relevant.length} relevant, ${newCount} new, ${matchedCount} matched (≥${MATCH_THRESHOLD})`
-        );
+        // Best-effort live append (insurance if the run is hard-killed before the
+        // final write). The authoritative top-N write happens at the end.
+        if (!isSmoke && titleMatched.length) {
+          try {
+            await appendJobs(titleMatched);
+          } catch (err) {
+            console.log(`    sheet append failed (kept in memory): ${(err as Error).message}`);
+          }
+        }
       });
     }
 
-    console.log(`\nNew unique jobs: ${totalNew}; matched (≥${MATCH_THRESHOLD}): ${totalMatched}`);
-    expect(seen.size).toBeGreaterThan(0);
+    const okSearches = titles.length - failedTitles.length;
+    console.log(
+      `\nSearches ok: ${okSearches}/${titles.length}` +
+        (failedTitles.length ? ` (failed: ${failedTitles.join(', ')})` : '') +
+        `; unique jobs: ${seen.size}; collected: ${matched.length}`
+    );
+    // Proceed as long as we collected at least one job, even after failures.
+    expect(matched.length).toBeGreaterThan(0);
 
-    // The top N matches (same set kept in the sheet).
+    // Rank the collected jobs and keep the top N (authoritative, from memory).
     matched.sort((a, b) => b.matchScore - a.matchScore);
     const topJobs = matched.slice(0, TOP_N);
 
-    await test.step(`Keep only the top ${TOP_N} by match score`, async () => {
+    await test.step(`Finalize: keep top ${TOP_N} by match score`, async () => {
       if (isSmoke) {
-        console.log(`SMOKE — would keep top ${TOP_N} of ${matched.length} matched:`);
+        console.log(`SMOKE — would keep top ${TOP_N} of ${matched.length} collected:`);
         topJobs.forEach((j) => console.log(`  ${j.matchScore} ${j.title} — ${j.company}`));
         return;
       }
-      const result = await keepTopJobs(TOP_N);
-      console.log(`Kept top ${result.kept} of ${result.total} matched jobs in the sheet.`);
-      expect(result.kept).toBeLessThanOrEqual(TOP_N);
+      // writeJobsToSheet clears the tab and writes header + the top N, so the
+      // final sheet is correct regardless of any earlier append hiccups.
+      const result = await writeJobsToSheet(topJobs);
+      console.log(
+        `Wrote top ${result.rows} of ${matched.length} collected to the sheet` +
+          (failedTitles.length ? ` (after ${failedTitles.length} failed search key(s))` : '') + '.'
+      );
+      expect(result.rows).toBeLessThanOrEqual(TOP_N);
     });
 
     await test.step(`Push the top ${TOP_N} to the Job Tracker API`, async () => {
