@@ -156,24 +156,57 @@ export class XingJobSearchPage {
 
   /**
    * Navigate directly to a keyword's results for the given location/recency and
-   * return the job cards. Tolerates "no results" (returns []).
+   * return the job cards. Tolerates the cases that would otherwise fail the
+   * whole run — no results, Xing's "Something went wrong" error page, and
+   * navigation/network errors all resolve to []. The caller can then move on
+   * to the next search key without aborting.
    */
   async collectCardsForKeyword(
     keyword: string,
     location = 'Germany',
     sincePeriod = 'LAST_24_HOURS'
   ): Promise<JobCard[]> {
-    await this.page.goto(this.buildSearchUrl(keyword, location, sincePeriod), {
-      waitUntil: 'domcontentloaded',
-    });
+    try {
+      await this.page.goto(this.buildSearchUrl(keyword, location, sincePeriod), {
+        waitUntil: 'domcontentloaded',
+        timeout: 30_000,
+      });
+    } catch (err) {
+      console.log(`    navigation failed for "${keyword}": ${(err as Error).message}`);
+      return [];
+    }
     // Wait for either job cards or the count heading to settle.
     await Promise.race([
       this.jobResults.first().waitFor({ timeout: 15_000 }).catch(() => {}),
       this.jobCountHeading.first().waitFor({ timeout: 15_000 }).catch(() => {}),
     ]);
     await this.page.waitForTimeout(700);
+    if (await this.isErrorPage()) {
+      console.log(`    error page shown for "${keyword}" — skipping`);
+      return [];
+    }
     if (!(await this.jobResults.first().isVisible().catch(() => false))) return [];
     return this.getJobCards();
+  }
+
+  /**
+   * Detect Xing's generic error / no-results screens so we can skip the
+   * search key without throwing. Matches the most common phrasings in EN/DE.
+   */
+  async isErrorPage(): Promise<boolean> {
+    const patterns: RegExp[] = [
+      /something went wrong/i,
+      /etwas ist schiefgelaufen/i,
+      /no (jobs?|results?) found/i,
+      /keine (jobs|treffer|ergebnisse)/i,
+      /try again/i,
+      /erneut versuchen/i,
+    ];
+    for (const re of patterns) {
+      const loc = this.page.getByText(re).first();
+      if (await loc.isVisible({ timeout: 500 }).catch(() => false)) return true;
+    }
+    return false;
   }
 
   /**
