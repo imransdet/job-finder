@@ -45,7 +45,7 @@ jobs:
       JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
       # Optional matching knobs (repo variables, with defaults).
       MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '0' }}
-      TOP_N: ${{ vars.TOP_N || '5' }}
+      TOP_N: ${{ vars.TOP_N || '10' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
