@@ -70,14 +70,6 @@ jobs:
           SEARCH_SINCE_PERIOD: ${{ github.event.client_payload.since_period }}
         run: npx playwright test xing-all-titles-to-sheet
 
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-
       # NOTE: sharing is via the Google Sheet (read by the other repo's service
       # account), so there is no GitHub Pages deploy here — Pages isn't available
       # on a private repo on the free plan, and would otherwise fail the run.
