@@ -11,7 +11,7 @@ import { pushApplied, trackerEnabled } from '../lib/tracker';
 // 0 = keep the top N by score regardless of score (the list is never empty).
 // Set a floor (e.g. 60) to only keep jobs at/above that score.
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 0);
-const TOP_N = Number(process.env.TOP_N ?? 5);
+const TOP_N = Number(process.env.TOP_N ?? 10);
 
 // Search keys live in search-config.json so they can be edited without touching code.
 const __dirname = dirname(fileURLToPath(import.meta.url));

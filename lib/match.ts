@@ -4,10 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JobRow } from './sheets';
 
-// Z.AI (Zhipu GLM) — Anthropic-compatible coding endpoint (the one the GLM
-// Coding Plan / Claude Code use). Messages API: POST /v1/messages.
+// Z.AI (Zhipu GLM) — Anthropic-compatible endpoint. POST /v1/messages.
 const BASE_URL = process.env.ZAI_BASE_URL || 'https://api.z.ai/api/anthropic';
-const MODEL = process.env.ZAI_MODEL || 'glm-4.6';
+const MODEL = process.env.ZAI_MODEL || 'glm-5.2';
 const API_KEY = process.env.ZAI_API_KEY;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,8 +29,9 @@ const SYSTEM_PROMPT =
   'You are a recruiter assistant. Given a candidate profile and a job posting, ' +
   'rate how well the job matches the candidate from 0 to 100, where 100 is a ' +
   'perfect fit. Consider role/skills overlap, seniority, location/work ' +
-  'authorization, and the candidate\'s stated preferences. Respond ONLY with a ' +
-  'JSON object: {"score": <integer 0-100>, "reason": "<one or two sentences>"}.';
+  'authorization, and the candidate\'s stated preferences. ' +
+  'You MUST respond with ONLY a raw JSON object — no markdown, no code fences, no extra text. ' +
+  'Format: {"score": <integer 0-100>, "reason": "<one or two sentences>"}';
 
 function buildUserPrompt(profile: string, job: JobRow): string {
   return [
@@ -47,22 +47,23 @@ function buildUserPrompt(profile: string, job: JobRow): string {
     `Salary: ${job.salary}`,
     `Description: ${(job.description || '').slice(0, 4000)}`,
     '',
-    'Return the JSON now.',
+    'Respond with the JSON object only.',
   ].join('\n');
 }
 
 function parseResult(content: string): MatchResult {
-  // Be tolerant of code fences or stray text around the JSON.
-  const json = content.match(/\{[\s\S]*\}/)?.[0] ?? content;
+  // Strip markdown code fences if the model wraps the JSON despite instructions.
+  const stripped = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+  const json = stripped.match(/\{[\s\S]*\}/)?.[0] ?? stripped;
   const obj = JSON.parse(json);
   const score = Math.max(0, Math.min(100, Math.round(Number(obj.score))));
   return { score: Number.isFinite(score) ? score : 0, reason: String(obj.reason ?? '').trim() };
 }
 
 /**
- * Score a job against the candidate profile via Z.AI. Retries a couple of times;
- * on persistent failure returns score 0 with the error noted (so the run
- * continues and the job simply won't clear the threshold).
+ * Score a job against the candidate profile via Z.AI (Zhipu GLM).
+ * Uses the Anthropic-compatible /v1/messages endpoint.
+ * Retries 3 times; on persistent failure returns score 0 so the run continues.
  */
 export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<MatchResult> {
   if (!API_KEY) throw new Error('Missing ZAI_API_KEY in environment/.env');
@@ -91,18 +92,20 @@ export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<Ma
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`Z.AI ${res.status}: ${text.slice(0, 200)}`);
+        throw new Error(`Z.AI ${res.status}: ${text.slice(0, 300)}`);
       }
       const data = await res.json();
-      // Anthropic returns { content: [{ type: 'text', text: '...' }] }.
-      const content =
+      // Anthropic format: { content: [{ type: 'text', text: '...' }] }
+      const content: string =
         Array.isArray(data?.content)
           ? data.content.map((b: { text?: string }) => b.text ?? '').join('')
           : data?.content ?? '';
+      if (!content) throw new Error(`Empty response from Z.AI: ${JSON.stringify(data).slice(0, 200)}`);
       return parseResult(content);
     } catch (err) {
       lastErr = err;
-      await new Promise((r) => setTimeout(r, 800 * attempt));
+      console.log(`    [score attempt ${attempt}/3 failed] ${(err as Error).message}`);
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
   }
   return { score: 0, reason: `scoring failed: ${(lastErr as Error)?.message ?? 'unknown'}` };
