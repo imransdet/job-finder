@@ -1,0 +1,53 @@
+name: LinkedIn job collector
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [run-linkedin-collector]
+  # Daily at 01:00 CEST (UTC+2) = 23:00 UTC. Offset from Xing run (22:30 UTC) to avoid overlap.
+  schedule:
+    - cron: '0 23 * * *'
+
+concurrency:
+  group: linkedin-jobs
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      HEADLESS: 'true'
+      BROWSER_CHANNEL: ''
+      # Same Google service account as Xing — writes to a different tab (ln-raw-data).
+      GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
+      GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+      # GOOGLE_SHEET_NAME_LN tells the spec which tab to use (default: ln-raw-data).
+      GOOGLE_SHEET_NAME_LN: ${{ secrets.GOOGLE_SHEET_NAME_LN || 'ln-raw-data' }}
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+      JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
+      MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '0' }}
+      TOP_N: ${{ vars.TOP_N || '10' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run LinkedIn collection (headless)
+        env:
+          SEARCH_LOCATION: ${{ github.event.client_payload.location }}
+          SEARCH_SINCE_PERIOD: ${{ github.event.client_payload.since_period }}
+        run: npx playwright test linkedin-jobs
