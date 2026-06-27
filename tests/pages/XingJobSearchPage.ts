@@ -185,7 +185,14 @@ export class XingJobSearchPage {
       console.log(`    error page shown for "${keyword}" — skipping`);
       return [];
     }
-    if (!(await this.jobResults.first().isVisible().catch(() => false))) return [];
+    if (!(await this.jobResults.first().isVisible().catch(() => false))) {
+      // Unrecognized empty state (e.g. a bot-check page) — log enough to
+      // diagnose without needing the (disabled) screenshot/trace artifacts.
+      const title = await this.page.title().catch(() => '');
+      const snippet = (await this.page.locator('body').innerText().catch(() => '')).slice(0, 300).replace(/\s+/g, ' ');
+      console.log(`    no job results for "${keyword}" — url=${this.page.url()} title="${title}" body="${snippet}"`);
+      return [];
+    }
     return this.getJobCards();
   }
 

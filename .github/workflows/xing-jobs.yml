@@ -32,8 +32,10 @@ jobs:
     env:
       CI: 'true'
       HEADLESS: 'true'
-      # Use Playwright's bundled Chromium in CI (no Google Chrome needed).
-      BROWSER_CHANNEL: ''
+      # Use real Google Chrome, not bundled Chromium: Xing's bot detection
+      # serves a blocked/empty results page to headless Chromium on
+      # datacenter IPs (silent 0-results failure), but passes with real Chrome.
+      BROWSER_CHANNEL: 'chrome'
       # Google Sheets credentials + target (configured as GitHub secrets).
       GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
@@ -59,8 +61,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright + Chrome
+        run: npx playwright install --with-deps chrome
 
       - name: Run Xing collection (headless)
         # Optional overrides from a Make.com repository_dispatch payload.
