@@ -65,7 +65,9 @@ jobs:
         run: npm ci
 
       - name: Install Playwright + Chrome
-        run: npx playwright install --with-deps chrome
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list || true
+          npx playwright install --with-deps chrome
 
       - name: Run Xing collection (headless)
         # Optional overrides from a Make.com repository_dispatch payload.
