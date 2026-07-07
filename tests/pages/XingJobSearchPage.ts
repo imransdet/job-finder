@@ -44,15 +44,19 @@ export class XingJobSearchPage {
   /** Accept the Usercentrics cookie consent banner (rendered in the main doc/iframe). */
   async acceptCookies() {
     const labels = ['Accept all', 'Accept All', 'Alle akzeptieren', 'Akzeptieren'];
-    // Give the CMP a moment to render.
-    await this.page.waitForTimeout(1500);
-    for (const frame of this.page.frames()) {
-      for (const label of labels) {
-        const btn = frame.getByRole('button', { name: label, exact: false });
-        if (await btn.count().catch(() => 0)) {
-          await btn.first().click({ timeout: 5000 }).catch(() => {});
-          await this.page.waitForTimeout(800);
-          return;
+    // Retry up to ~10 s — the CMP can be slow to inject in CI.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await this.page.waitForTimeout(attempt === 0 ? 2000 : 1500);
+      for (const frame of this.page.frames()) {
+        for (const label of labels) {
+          const btn = frame.getByRole('button', { name: label, exact: false });
+          if (await btn.count().catch(() => 0)) {
+            if (await btn.first().isVisible({ timeout: 1000 }).catch(() => false)) {
+              await btn.first().click({ timeout: 5000 }).catch(() => {});
+              await this.page.waitForTimeout(800);
+              return;
+            }
+          }
         }
       }
     }

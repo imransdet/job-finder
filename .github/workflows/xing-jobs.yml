@@ -45,6 +45,9 @@ jobs:
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
       # Job Tracker API key to push the top matches (GitHub secret; optional).
       JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
+      # Stored Xing session cookies (JSON array) to bypass IP-based bot-gating
+      # in CI. Capture once with: npx tsx scripts/capture-xing-cookies.ts
+      XING_COOKIES: ${{ secrets.XING_COOKIES }}
       # Optional matching knobs (repo variables, with defaults).
       MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '0' }}
       TOP_N: ${{ vars.TOP_N || '10' }}

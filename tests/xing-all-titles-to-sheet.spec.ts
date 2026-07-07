@@ -100,6 +100,26 @@ test.describe('Xing multi-title job collection', () => {
     }
     if (scoringEnabled) loadProfile(); // fail fast if profile.md is missing
 
+    // Remove the webdriver automation flag before any navigation — helps
+    // bypass Xing's bot-detection which serves a premium gate to CI runners.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
+    // Inject stored session cookies (bypasses IP-based gating in CI).
+    // Set XING_COOKIES to the JSON-serialised Playwright cookies array captured
+    // by scripts/capture-xing-cookies.ts after a manual Xing login.
+    const cookiesJson = process.env.XING_COOKIES;
+    if (cookiesJson) {
+      try {
+        const cookies = JSON.parse(cookiesJson);
+        await page.context().addCookies(cookies);
+        console.log(`Injected ${cookies.length} stored Xing session cookies.`);
+      } catch {
+        console.log('Warning: XING_COOKIES is set but could not be parsed — proceeding without stored cookies.');
+      }
+    }
+
     // Dedupe the search keys themselves (case-insensitive).
     const seenTitle = new Set<string>();
     const dedupedTitles = JOB_TITLES.filter((t) => {

@@ -35,7 +35,16 @@ export default defineConfig({
   projects: [
     {
       name: 'chrome',
-      use: { ...devices['Desktop Chrome'], channel, headless },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel,
+        headless,
+        launchOptions: {
+          // Remove the automation-detection signal that sites like Xing use to
+          // serve a login/premium gate to headless CI browsers.
+          args: ['--disable-blink-features=AutomationControlled'],
+        },
+      },
     },
   ],
 });
