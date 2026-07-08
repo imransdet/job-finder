@@ -8,3 +8,4 @@ service-account*.json
 *-copy.json
 site/
 .claude/
+.playwright-mcp/

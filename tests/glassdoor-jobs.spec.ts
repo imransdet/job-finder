@@ -2,17 +2,17 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { ArbeitsagenturJobSearchPage, BAJobCard } from './pages/ArbeitsagenturJobSearchPage';
-import { scrapeBADetail } from '../lib/scrape-ba';
+import { GlassdoorJobSearchPage, GlassdoorJobCard } from './pages/GlassdoorJobSearchPage';
+import { scrapeGlassdoorDetail } from '../lib/scrape-glassdoor';
 import { initSheet, appendJobs, writeJobsToSheet, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
 
-// Route Google Sheets writes to the Arbeitsagentur tab.
-process.env.GOOGLE_SHEET_NAME = process.env.GOOGLE_SHEET_NAME_BA ?? 'ba-raw-data';
+// Route Google Sheets writes to the Glassdoor tab instead of the Xing tab.
+process.env.GOOGLE_SHEET_NAME = process.env.GOOGLE_SHEET_NAME_GD ?? 'gd-raw-data';
 
-// Use 'Arbeitsagentur' as the platform name for the Job Tracker push.
-process.env.JOB_TRACKER_PLATFORM = 'Arbeitsagentur';
+// Use 'Glassdoor' as the platform name for the Job Tracker push.
+process.env.JOB_TRACKER_PLATFORM = 'Glassdoor';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 0);
 const TOP_N = Number(process.env.TOP_N ?? 10);
@@ -20,18 +20,24 @@ const TOP_N = Number(process.env.TOP_N ?? 10);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG = JSON.parse(readFileSync(resolve(__dirname, '../search-config.json'), 'utf8')) as {
   location: string;
+  sincePeriod: string;
   job_titles: string[];
 };
 const JOB_TITLES: string[] = CONFIG.job_titles;
-// BA uses German location names; default to "Deutschland" (Germany).
-const LOCATION = process.env.SEARCH_LOCATION_BA || 'Deutschland';
+const LOCATION = process.env.SEARCH_LOCATION || CONFIG.location || 'Deutschland';
+const SINCE_PERIOD = process.env.SEARCH_SINCE_PERIOD || CONFIG.sincePeriod || 'LAST_24_HOURS';
 
-const GENDER_RE = /\b(m\/w\/d|m\/f\/d|w\/m\/d|d\/f\/m|m\/f\/x|m\/w\/x|w\/m\/x|f\/m\/d|f\/m\/x|m\/w\/d\/x|all genders?|gn)\b/gi;
-const STOPWORDS = new Set(
-  ['im', 'in', 'der', 'die', 'das', 'den', 'the', 'for', 'fuer', 'für', 'an', 'at',
-   'als', 'a', 'und', 'and', 'mit', 'with', 'von', 'of', 'zur', 'zum', 'bei', 'm', 'w', 'd', 'f', 'x',
-   'remote', 'hybrid', 'onsite', 'site', 'home', 'office', 'homeoffice', 'telearbeit']
-);
+function jobId(url: string): string {
+  return url.match(/[?&]jl=(\d+)/)?.[1] ?? url;
+}
+
+const GENDER_RE =
+  /\b(m\/w\/d|m\/f\/d|w\/m\/d|d\/f\/m|m\/f\/x|m\/w\/x|w\/m\/x|f\/m\/d|f\/m\/x|m\/w\/d\/x|all genders?|gn)\b/gi;
+const STOPWORDS = new Set([
+  'im', 'in', 'der', 'die', 'das', 'den', 'the', 'for', 'fuer', 'für', 'an', 'at',
+  'als', 'a', 'und', 'and', 'mit', 'with', 'von', 'of', 'zur', 'zum', 'bei', 'm', 'w', 'd', 'f', 'x',
+  'remote', 'hybrid', 'onsite', 'site', 'home', 'office', 'homeoffice', 'telearbeit',
+]);
 
 function normTitle(s: string): string {
   return s
@@ -47,10 +53,10 @@ function normTitle(s: string): string {
     .trim();
 }
 
-function dedupeKey(card: BAJobCard): string {
+function dedupeKey(card: GlassdoorJobCard): string {
   const company = card.company.toLowerCase().replace(/\s+/g, ' ').trim();
   const title = normTitle(card.title);
-  return title ? `${title}::${company}` : card.jobId;
+  return title ? `${title}::${company}` : jobId(card.url);
 }
 
 const QA_RELEVANCE =
@@ -60,11 +66,11 @@ function isRelevant(title: string): boolean {
   return QA_RELEVANCE.test(title);
 }
 
-test.describe('Arbeitsagentur multi-title job collection', () => {
+test.describe('Glassdoor multi-title job collection', () => {
   test.setTimeout(60 * 60_000);
 
   test('per-search scrape + profile match (Z.AI), write matches, keep top N', async ({ page }) => {
-    const ba = new ArbeitsagenturJobSearchPage(page);
+    const glassdoor = new GlassdoorJobSearchPage(page);
     const isSmoke = !!process.env.LIMIT;
     const scoringEnabled = !!process.env.ZAI_API_KEY;
     if (!isSmoke && !scoringEnabled) {
@@ -85,19 +91,20 @@ test.describe('Arbeitsagentur multi-title job collection', () => {
     if (!isSmoke) await initSheet();
 
     // First navigation also triggers cookie consent; accept once.
-    await page.goto(ba.buildSearchUrl(titles[0], LOCATION), { waitUntil: 'domcontentloaded' });
-    await ba.acceptCookies();
+    await page.goto(glassdoor.buildSearchUrl(titles[0], LOCATION, SINCE_PERIOD), {
+      waitUntil: 'domcontentloaded',
+    });
+    await glassdoor.acceptCookies();
 
     const seen = new Set<string>();
     const matched: JobRow[] = [];
     const failedTitles: string[] = [];
-    let totalNew = 0;
 
     for (const [i, title] of titles.entries()) {
       await test.step(`Search "${title}" → scrape → score`, async () => {
         const titleMatched: JobRow[] = [];
         try {
-          const cards = await ba.collectCardsForKeyword(title, LOCATION);
+          const cards = await glassdoor.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
           const relevant = cards.filter((c) => isRelevant(c.title));
           let newCount = 0;
 
@@ -108,7 +115,7 @@ test.describe('Arbeitsagentur multi-title job collection', () => {
 
             let job: JobRow;
             try {
-              job = await scrapeBADetail(page, card);
+              job = await scrapeGlassdoorDetail(page, card);
             } catch (err) {
               console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
               continue;
@@ -129,14 +136,13 @@ test.describe('Arbeitsagentur multi-title job collection', () => {
             console.log(`    score ${String(job.matchScore).padStart(3)} | ${job.title} — ${job.company}`);
           }
 
-          totalNew += newCount;
           console.log(
-            `[${i + 1}/${titles.length}] "${title}": ${relevant.length} relevant, ${newCount} new, ${titleMatched.length} kept`
+            `[${i + 1}/${titles.length}] "${title}": ${relevant.length} relevant, ${newCount} new, ${titleMatched.length} kept`,
           );
         } catch (err) {
           failedTitles.push(title);
           console.log(
-            `[${i + 1}/${titles.length}] "${title}" SEARCH FAILED: ${(err as Error).message} — continuing`
+            `[${i + 1}/${titles.length}] "${title}" SEARCH FAILED: ${(err as Error).message} — continuing`,
           );
         }
 
@@ -154,7 +160,7 @@ test.describe('Arbeitsagentur multi-title job collection', () => {
     console.log(
       `\nSearches ok: ${okSearches}/${titles.length}` +
         (failedTitles.length ? ` (failed: ${failedTitles.join(', ')})` : '') +
-        `; unique jobs: ${seen.size}; collected: ${matched.length}`
+        `; unique jobs: ${seen.size}; collected: ${matched.length}`,
     );
     expect(matched.length).toBeGreaterThan(0);
 
@@ -170,7 +176,8 @@ test.describe('Arbeitsagentur multi-title job collection', () => {
       const result = await writeJobsToSheet(topJobs);
       console.log(
         `Wrote top ${result.rows} of ${matched.length} collected to "${result.sheetName}"` +
-          (failedTitles.length ? ` (after ${failedTitles.length} failed search key(s))` : '') + '.'
+          (failedTitles.length ? ` (after ${failedTitles.length} failed search key(s))` : '') +
+          '.',
       );
       expect(result.rows).toBeLessThanOrEqual(TOP_N);
     });

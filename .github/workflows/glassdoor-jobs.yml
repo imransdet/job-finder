@@ -1,15 +1,15 @@
-name: Arbeitsagentur job collector
+name: Glassdoor job collector
 
 on:
   workflow_dispatch:
   repository_dispatch:
-    types: [run-ba-collector]
-  # Daily at 01:30 CEST (UTC+2) = 23:30 UTC. Offset from Xing (22:30) and LinkedIn (23:00).
+    types: [run-glassdoor-collector]
+  # Daily at 23:00 CEST (UTC+2) = 21:00 UTC. Runs between Xing (20:00) and LinkedIn (23:00).
   schedule:
-    - cron: '30 23 * * *'
+    - cron: '0 21 * * *'
 
 concurrency:
-  group: ba-jobs
+  group: glassdoor-jobs
   cancel-in-progress: false
 
 jobs:
@@ -19,13 +19,13 @@ jobs:
     env:
       CI: 'true'
       HEADLESS: 'true'
-      # Bundled Chromium works fine — Arbeitsagentur has no bot protection.
+      # Bundled Chromium works fine — Glassdoor has no bot protection.
       BROWSER_CHANNEL: ''
       GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
       GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-      # GOOGLE_SHEET_NAME_BA tells the spec which tab to use (default: ba-raw-data).
-      GOOGLE_SHEET_NAME_BA: ${{ secrets.GOOGLE_SHEET_NAME_BA || 'ba-raw-data' }}
+      # GOOGLE_SHEET_NAME_GD tells the spec which tab to use (default: gd-raw-data).
+      GOOGLE_SHEET_NAME_GD: ${{ secrets.GOOGLE_SHEET_NAME_GD || 'gd-raw-data' }}
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
       JOB_TRACKER_API_KEY: ${{ secrets.JOB_TRACKER_API_KEY }}
       MATCH_THRESHOLD: ${{ vars.MATCH_THRESHOLD || '0' }}
@@ -48,8 +48,8 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list || true
           npx playwright install --with-deps chromium
 
-      - name: Run Arbeitsagentur collection (headless)
+      - name: Run Glassdoor collection (headless)
         env:
-          SEARCH_LOCATION_BA: ${{ github.event.client_payload.location || 'Deutschland' }}
+          SEARCH_LOCATION: ${{ github.event.client_payload.location }}
           SEARCH_SINCE_PERIOD: ${{ github.event.client_payload.since_period }}
-        run: npx playwright test ba-jobs
+        run: npx playwright test glassdoor-jobs
