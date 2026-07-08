@@ -53,8 +53,7 @@ export async function scrapeGlassdoorDetail(page: Page, card: GlassdoorJobCard):
 
   const salary =
     card.salary ||
-    bodyText.match(/€\s?[\d.,]+(?:\s*[–\-]\s*€?\s?[\d.,]+)?/)?.[0]?.replace(/\s+/g, ' ').trim() ??
-    '';
+    (bodyText.match(/€\s?[\d.,]+(?:\s*[–\-]\s*€?\s?[\d.,]+)?/)?.[0]?.replace(/\s+/g, ' ').trim() ?? '');
 
   const employmentType =
     bodyText.match(/\b(Vollzeit|Teilzeit|Freelance|Praktikum|Werkstudent|Full-time|Part-time|Contract)\b/i)?.[1] ?? '';
