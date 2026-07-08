@@ -19,8 +19,8 @@ jobs:
     env:
       CI: 'true'
       HEADLESS: 'true'
-      # Bundled Chromium works fine — Glassdoor has no bot protection.
-      BROWSER_CHANNEL: ''
+      # Use real Chrome (same as Xing) to pass Cloudflare bot-detection on CI datacenter IPs.
+      BROWSER_CHANNEL: 'chrome'
       GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
       GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
@@ -43,10 +43,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium
+      - name: Install Playwright + Chrome
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list || true
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chrome
 
       - name: Run Glassdoor collection (headless)
         env:

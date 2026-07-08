@@ -70,6 +70,11 @@ test.describe('Glassdoor multi-title job collection', () => {
   test.setTimeout(60 * 60_000);
 
   test('per-search scrape + profile match (Z.AI), write matches, keep top N', async ({ page }) => {
+    // Remove automation signal that triggers Cloudflare/bot-detection challenges.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
     const glassdoor = new GlassdoorJobSearchPage(page);
     const isSmoke = !!process.env.LIMIT;
     const scoringEnabled = !!process.env.ZAI_API_KEY;
