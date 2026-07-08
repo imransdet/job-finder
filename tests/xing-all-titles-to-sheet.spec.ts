@@ -110,6 +110,7 @@ test.describe('Xing multi-title job collection', () => {
     // Set XING_COOKIES to the JSON-serialised Playwright cookies array captured
     // by scripts/capture-xing-cookies.ts after a manual Xing login.
     const cookiesJson = process.env.XING_COOKIES;
+    console.log(`XING_COOKIES: ${cookiesJson ? `set (${cookiesJson.length} chars)` : 'NOT SET — will try without stored session'}`);
     if (cookiesJson) {
       try {
         const cookies = JSON.parse(cookiesJson);
