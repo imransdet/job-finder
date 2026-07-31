@@ -2,17 +2,17 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { GlassdoorJobSearchPage, GlassdoorJobCard } from './pages/GlassdoorJobSearchPage';
-import { scrapeGlassdoorDetail } from '../lib/scrape-glassdoor';
+import { ArbeitsagenturJobSearchPage, ArbeitsagenturJobCard } from './pages/ArbeitsagenturJobSearchPage';
+import { scrapeArbeitsagenturDetail } from '../lib/scrape-arbeitsagentur';
 import { initSheet, appendJobs, writeJobsToSheet, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
 
-// Route Google Sheets writes to the Glassdoor tab instead of the Xing tab.
-process.env.GOOGLE_SHEET_NAME = process.env.GOOGLE_SHEET_NAME_GD ?? 'gd-raw-data';
+// Route Google Sheets writes to the Arbeitsagentur tab.
+process.env.GOOGLE_SHEET_NAME = process.env.GOOGLE_SHEET_NAME_BA ?? 'ba-raw-data';
 
-// Use 'Glassdoor' as the platform name for the Job Tracker push.
-process.env.JOB_TRACKER_PLATFORM = 'Glassdoor';
+// Use 'Arbeitsagentur' as the platform name for the Job Tracker push.
+process.env.JOB_TRACKER_PLATFORM = 'Arbeitsagentur';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 0);
 const TOP_N = Number(process.env.TOP_N ?? 10);
@@ -28,7 +28,7 @@ const LOCATION = process.env.SEARCH_LOCATION || CONFIG.location || 'Deutschland'
 const SINCE_PERIOD = process.env.SEARCH_SINCE_PERIOD || CONFIG.sincePeriod || 'LAST_24_HOURS';
 
 function jobId(url: string): string {
-  return url.match(/[?&]jl=(\d+)/)?.[1] ?? url;
+  return url.match(/jobdetail\/([^?]+)/)?.[1] ?? url;
 }
 
 const GENDER_RE =
@@ -53,7 +53,7 @@ function normTitle(s: string): string {
     .trim();
 }
 
-function dedupeKey(card: GlassdoorJobCard): string {
+function dedupeKey(card: ArbeitsagenturJobCard): string {
   const company = card.company.toLowerCase().replace(/\s+/g, ' ').trim();
   const title = normTitle(card.title);
   return title ? `${title}::${company}` : jobId(card.url);
@@ -66,16 +66,11 @@ function isRelevant(title: string): boolean {
   return QA_RELEVANCE.test(title);
 }
 
-test.describe('Glassdoor multi-title job collection', () => {
+test.describe('Arbeitsagentur multi-title job collection', () => {
   test.setTimeout(60 * 60_000);
 
   test('per-search scrape + profile match (Z.AI), write matches, keep top N', async ({ page }) => {
-    // Remove automation signal that triggers Cloudflare/bot-detection challenges.
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
-
-    const glassdoor = new GlassdoorJobSearchPage(page);
+    const ba = new ArbeitsagenturJobSearchPage(page);
     const isSmoke = !!process.env.LIMIT;
     const scoringEnabled = !!process.env.ZAI_API_KEY;
     if (!isSmoke && !scoringEnabled) {
@@ -95,12 +90,6 @@ test.describe('Glassdoor multi-title job collection', () => {
 
     if (!isSmoke) await initSheet();
 
-    // First navigation also triggers cookie consent; accept once.
-    await page.goto(glassdoor.buildSearchUrl(titles[0], LOCATION, SINCE_PERIOD), {
-      waitUntil: 'domcontentloaded',
-    });
-    await glassdoor.acceptCookies();
-
     const seen = new Set<string>();
     const matched: JobRow[] = [];
     const failedTitles: string[] = [];
@@ -109,7 +98,7 @@ test.describe('Glassdoor multi-title job collection', () => {
       await test.step(`Search "${title}" → scrape → score`, async () => {
         const titleMatched: JobRow[] = [];
         try {
-          const cards = await glassdoor.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
+          const cards = await ba.collectCardsForKeyword(title, LOCATION, SINCE_PERIOD);
           const relevant = cards.filter((c) => isRelevant(c.title));
           let newCount = 0;
 
@@ -120,7 +109,7 @@ test.describe('Glassdoor multi-title job collection', () => {
 
             let job: JobRow;
             try {
-              job = await scrapeGlassdoorDetail(page, card);
+              job = await scrapeArbeitsagenturDetail(page, card);
             } catch (err) {
               console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
               continue;
