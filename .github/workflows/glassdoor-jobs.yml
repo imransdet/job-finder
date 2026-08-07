@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [run-glassdoor-collector]
-  # Daily at 23:00 CEST (UTC+2) = 21:00 UTC. Runs between Xing (20:00) and LinkedIn (23:00).
-  schedule:
-    - cron: '0 21 * * *'
+  # Schedule disabled — Glassdoor is blocked by Cloudflare on CI datacenter IPs.
+  # Runs instead via a local Mac cron job (scripts/run-glassdoor-cron.sh) at 11 PM CEST daily.
 
 concurrency:
   group: glassdoor-jobs
