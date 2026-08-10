@@ -26,7 +26,7 @@ fi
 
 cd "$PROJECT_DIR"
 
-npx playwright test glassdoor-jobs >> "$LOG_FILE" 2>&1
+HEADLESS=true npx playwright test glassdoor-jobs >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
 
 echo "=== Finished: $(date) — exit $EXIT_CODE ===" >> "$LOG_FILE"
