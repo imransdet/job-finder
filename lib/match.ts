@@ -8,6 +8,7 @@ import { JobRow } from './sheets';
 const BASE_URL = process.env.ZAI_BASE_URL || 'https://api.z.ai/api/anthropic';
 const MODEL = process.env.ZAI_MODEL || 'glm-5.2';
 const API_KEY = process.env.ZAI_API_KEY;
+const SCORE_TIMEOUT_MS = 15_000;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +61,28 @@ function parseResult(content: string): MatchResult {
   return { score: Number.isFinite(score) ? score : 0, reason: String(obj.reason ?? '').trim() };
 }
 
+type ContentBlock = { type: string; text?: string; thinking?: string };
+
+/**
+ * Extract the scoring text from an Anthropic-format response.
+ * GLM-5 extended-thinking models sometimes emit only a "thinking" block with no
+ * "text" block when max_tokens is tight. We prefer the text block; if absent,
+ * we try to extract a JSON object from the thinking content as a fallback.
+ */
+function extractContent(data: unknown): string {
+  const blocks = (data as { content?: ContentBlock[] })?.content;
+  if (!Array.isArray(blocks)) return String((data as { content?: string })?.content ?? '');
+  const textBlock = blocks.find((b) => b.type === 'text' && b.text);
+  if (textBlock?.text) return textBlock.text;
+  // Fallback: look for a JSON score object embedded inside the thinking block.
+  const thinkingBlock = blocks.find((b) => b.type === 'thinking' && b.thinking);
+  if (thinkingBlock?.thinking) {
+    const match = thinkingBlock.thinking.match(/\{[^{}]*"score"[^{}]*\}/s);
+    if (match) return match[0];
+  }
+  return '';
+}
+
 /**
  * Score a job against the candidate profile via Z.AI (Zhipu GLM).
  * Uses the Anthropic-compatible /v1/messages endpoint.
@@ -68,10 +91,10 @@ function parseResult(content: string): MatchResult {
 export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<MatchResult> {
   if (!API_KEY) throw new Error('Missing ZAI_API_KEY in environment/.env');
 
-  // Anthropic Messages API shape.
+  // Anthropic Messages API shape. max_tokens must be large enough for thinking + response.
   const body = {
     model: MODEL,
-    max_tokens: 300,
+    max_tokens: 1500,
     temperature: 0,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserPrompt(profile, job) }],
@@ -80,31 +103,38 @@ export async function scoreJob(job: JobRow, profile = loadProfile()): Promise<Ma
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const res = await fetch(`${BASE_URL}/v1/messages`, {
-        method: 'POST',
-        headers: {
-          'x-api-key': API_KEY,
-          Authorization: `Bearer ${API_KEY}`,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(`${BASE_URL}/v1/messages`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'x-api-key': API_KEY,
+            Authorization: `Bearer ${API_KEY}`,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`Z.AI ${res.status}: ${text.slice(0, 300)}`);
       }
       const data = await res.json();
-      // Anthropic format: { content: [{ type: 'text', text: '...' }] }
-      const content: string =
-        Array.isArray(data?.content)
-          ? data.content.map((b: { text?: string }) => b.text ?? '').join('')
-          : data?.content ?? '';
+      const content = extractContent(data);
       if (!content) throw new Error(`Empty response from Z.AI: ${JSON.stringify(data).slice(0, 200)}`);
       return parseResult(content);
     } catch (err) {
       lastErr = err;
-      console.log(`    [score attempt ${attempt}/3 failed] ${(err as Error).message}`);
+      const msg = (err as Error).message ?? '';
+      console.log(`    [score attempt ${attempt}/3 failed] ${msg}`);
+      // Don't retry on abort (timeout) — the API is clearly degraded right now.
+      if (msg.includes('aborted') || msg.includes('abort')) break;
       await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
   }
