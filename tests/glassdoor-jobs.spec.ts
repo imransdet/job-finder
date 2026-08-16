@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { GlassdoorJobSearchPage, GlassdoorJobCard } from './pages/GlassdoorJobSearchPage';
-import { scrapeGlassdoorDetail } from '../lib/scrape-glassdoor';
 import { initSheet, appendJobs, writeJobsToSheet, JobRow } from '../lib/sheets';
 import { scoreJob, loadProfile } from '../lib/match';
 import { pushApplied, trackerEnabled } from '../lib/tracker';
@@ -118,14 +117,25 @@ test.describe('Glassdoor multi-title job collection', () => {
             if (seen.has(key)) continue;
             seen.add(key);
 
-            let job: JobRow;
-            try {
-              job = await scrapeGlassdoorDetail(page, card);
-            } catch (err) {
-              console.log(`    scrape failed: ${card.url} — ${(err as Error).message}`);
-              continue;
-            }
-            job.foundVia = title;
+            // Build JobRow directly from card data — no detail page navigation.
+            // Glassdoor's Cloudflare blocks individual job pages from headless browsers,
+            // so we score from the title + company which is sufficient for ranking.
+            const job: JobRow = {
+              title: card.title,
+              company: card.company,
+              location: card.location,
+              workplace: card.workplace,
+              employmentType: card.employmentType,
+              salary: card.salary,
+              posted: card.posted,
+              badge: '',
+              url: card.url,
+              description: card.title,
+              foundVia: title,
+              scrapedAt: new Date().toISOString(),
+              matchScore: 0,
+              matchReason: '',
+            };
             newCount++;
 
             if (scoringEnabled) {

@@ -8,6 +8,8 @@ export interface GlassdoorJobCard {
   location: string;
   posted: string;
   salary: string;
+  workplace: string;
+  employmentType: string;
 }
 
 const clean = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
@@ -133,7 +135,26 @@ export class GlassdoorJobSearchPage {
       const salary =
         cardText.match(/€\s?[\d.,]+\s*[–\-]\s*€?\s?[\d.,]+/)?.[0]?.replace(/\s+/g, ' ').trim() ?? '';
 
-      results.push({ jobId, url, title, company, location: '', posted, salary });
+      // Workplace from card badges (Glassdoor shows "Remote", "Hybrid", "Vor Ort")
+      const workplace = /\bremote\b/i.test(cardText)
+        ? 'Remote'
+        : /\bhybrid\b/i.test(cardText)
+        ? 'Hybrid'
+        : '';
+
+      // Employment type if shown on card
+      const employmentType =
+        cardText.match(/\b(Vollzeit|Teilzeit|Freelance|Praktikum|Werkstudent|Full-time|Part-time|Contract)\b/i)?.[1] ?? '';
+
+      // Location: first short line that looks like a city (not the title, not the company)
+      const lines = cardText.split('\n').map(l => l.trim()).filter(Boolean);
+      const location = lines.find(l =>
+        l !== title && l !== company && l.length > 2 && l.length < 60 &&
+        !/^\d/.test(l) && !/^(Std|T\+?|T|€|Remote|Hybrid|Vor Ort|Vollzeit|Teilzeit)/i.test(l) &&
+        !/logo/i.test(l)
+      ) ?? '';
+
+      results.push({ jobId, url, title, company, location, posted, salary, workplace, employmentType });
     }
     return results.filter((c) => c.jobId && c.title);
   }
